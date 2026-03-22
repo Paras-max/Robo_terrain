@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Roboyaan — Terrain Classifier</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet" />
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Syne', sans-serif; background: #0d1117; color: #f0f6fc; min-height: 100vh; }
+
+/* ── TOP BAR ──────────────────────────────────────────────────────────── */
+.topbar {
+  display: flex; align-items: center; gap: 12px;
+  padding: 13px 28px; background: #161b22;
+  border-bottom: 1px solid #21262d;
+  position: sticky; top: 0; z-index: 10;
+}
+.badge {
+  background: #1D9E75; color: #fff; font-size: 9px;
+  font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase;
+  padding: 3px 8px; border-radius: 4px;
+}
+.topbar h1 { font-size: 15px; font-weight: 800; letter-spacing: -0.02em; }
+.status-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: #1D9E75; margin-left: auto; flex-shrink: 0;
+  box-shadow: 0 0 0 3px rgba(29,158,117,0.2);
+}
+.status-txt { font-size: 10px; font-family: 'Space Mono', monospace; color: #8b949e; }
+
+/* ── LAYOUT ──────────────────────────────────────────────────────────── */
+.layout {
+  display: grid;
+  grid-template-columns: 420px 1fr;
+  min-height: calc(100vh - 50px);
+}
+
+/* ── LEFT ─────────────────────────────────────────────────────────────── */
+.left {
+  padding: 24px;
+  border-right: 1px solid #21262d;
+  display: flex; flex-direction: column; gap: 18px;
+}
+
+.section-lbl {
+  font-size: 9px; text-transform: uppercase; letter-spacing: 0.14em;
+  color: #8b949e; font-family: 'Space Mono', monospace; margin-bottom: 8px;
+}
+
+/* Upload zone */
+.upload-zone {
+  border: 1.5px dashed #30363d; border-radius: 12px;
+  padding: 36px 16px; text-align: center; cursor: pointer;
+  background: #161b22; position: relative;
+  transition: border-color 0.2s, background 0.2s;
+}
+.upload-zone:hover, .upload-zone.drag { border-color: #1D9E75; background: #0a1f16; }
+.upload-zone input {
+  position: absolute; inset: 0; opacity: 0;
+  cursor: pointer; width: 100%; height: 100%;
+}
+.up-icon {
+  width: 42px; height: 42px; border-radius: 50%;
+  border: 1.5px solid #30363d;
+  display: flex; align-items: center; justify-content: center;
+  margin: 0 auto 12px; font-size: 18px;
+}
+.upload-zone p { font-size: 13px; color: #8b949e; }
+.upload-zone span { font-size: 10px; color: #484f58; font-family: 'Space Mono', monospace; margin-top: 5px; display: block; }
+
+/* Sample chips */
+.chips { display: flex; gap: 7px; flex-wrap: wrap; }
+.chip {
+  border: 1px solid #30363d; border-radius: 20px;
+  padding: 5px 12px; font-size: 11px; font-family: 'Space Mono', monospace;
+  cursor: pointer; background: #161b22; color: #8b949e;
+  transition: all 0.15s;
+}
+.chip:hover { border-color: #1D9E75; color: #1D9E75; background: #0a1f16; }
+
+/* Preview */
+.preview-wrap {
+  border-radius: 12px; overflow: hidden;
+  border: 1px solid #21262d; position: relative;
+}
+.preview-wrap img { width: 100%; max-height: 240px; object-fit: cover; display: block; }
+.preview-actions {
+  position: absolute; top: 8px; right: 8px; display: flex; gap: 6px;
+}
+.btn-sm {
+  background: rgba(13,17,23,0.85); border: 1px solid #30363d;
+  border-radius: 6px; font-size: 11px; font-family: 'Space Mono', monospace;
+  padding: 4px 10px; cursor: pointer; color: #f0f6fc;
+  backdrop-filter: blur(4px);
+}
+.btn-sm:hover { background: #21262d; }
+
+/* Analyze button */
+.analyze-btn {
+  width: 100%; padding: 12px; background: #1D9E75; color: #fff;
+  border: none; border-radius: 8px; font-family: 'Syne', sans-serif;
+  font-size: 14px; font-weight: 700; letter-spacing: 0.04em;
+  cursor: pointer; transition: background 0.2s, transform 0.1s;
+}
+.analyze-btn:hover { background: #0F6E56; }
+.analyze-btn:active { transform: scale(0.99); }
+.analyze-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* ── RIGHT ────────────────────────────────────────────────────────────── */
+.right {
+  padding: 24px;
+  display: flex; flex-direction: column; gap: 16px;
+  overflow-y: auto;
+}
+
+/* Empty state */
+.empty-state {
+  flex: 1; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 10px;
+  color: #484f58; text-align: center;
+}
+.empty-state .big { font-size: 36px; }
+.empty-state p { font-size: 12px; font-family: 'Space Mono', monospace; }
+
+/* Result card */
+.result-card {
+  background: #161b22; border: 1px solid #21262d;
+  border-radius: 12px; overflow: hidden;
+}
+
+.result-header {
+  padding: 14px 16px; border-bottom: 1px solid #21262d;
+  display: flex; align-items: center; gap: 12px;
+}
+.terrain-icon {
+  width: 42px; height: 42px; border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 22px; flex-shrink: 0;
+}
+.terrain-name { font-size: 17px; font-weight: 800; letter-spacing: -0.02em; }
+.terrain-conf { font-size: 11px; font-family: 'Space Mono', monospace; color: #8b949e; margin-top: 2px; }
+
+/* Stats grid */
+.stats-grid {
+  display: grid; grid-template-columns: 1fr 1fr 1fr;
+  gap: 1px; background: #21262d;
+}
+.stat-cell {
+  background: #0d1117; padding: 14px 16px;
+}
+.stat-cell .lbl { font-size: 9px; text-transform: uppercase; letter-spacing: 0.12em; color: #8b949e; font-family: 'Space Mono', monospace; margin-bottom: 5px; }
+.stat-cell .val { font-size: 22px; font-weight: 800; letter-spacing: -0.03em; }
+.stat-cell .sub { font-size: 10px; color: #484f58; font-family: 'Space Mono', monospace; margin-top: 3px; }
+
+/* Colour classes */
+.c-safe     { color: #3fb950; }
+.c-moderate { color: #d29922; }
+.c-high     { color: #f0883e; }
+.c-danger   { color: #f85149; }
+
+/* Reasoning */
+.reasoning-box {
+  padding: 12px 16px; border-top: 1px solid #21262d;
+  font-size: 12px; color: #8b949e; line-height: 1.6;
+  font-style: italic;
+}
+
+/* Probability bars */
+.probs-section { padding: 14px 16px; border-top: 1px solid #21262d; }
+.prob-row { display: flex; align-items: center; gap: 10px; margin-bottom: 9px; }
+.prob-row:last-child { margin-bottom: 0; }
+.prob-name { width: 115px; font-size: 11px; color: #8b949e; flex-shrink: 0; }
+.prob-track { flex: 1; height: 4px; background: #21262d; border-radius: 2px; overflow: hidden; }
+.prob-fill { height: 100%; border-radius: 2px; background: #30363d; transition: width 0.7s cubic-bezier(0.16,1,0.3,1); }
+.prob-fill.active { background: #1D9E75; }
+.prob-pct { width: 38px; text-align: right; font-size: 11px; font-family: 'Space Mono', monospace; color: #8b949e; flex-shrink: 0; }
+
+/* Terminal output */
+.terminal {
+  background: #010409; border: 1px solid #21262d;
+  border-radius: 10px; overflow: hidden;
+}
+.terminal-bar {
+  padding: 9px 14px; background: #161b22;
+  border-bottom: 1px solid #21262d;
+  display: flex; align-items: center; gap: 7px;
+}
+.dot { width: 10px; height: 10px; border-radius: 50%; }
+.dot-r { background: #f85149; }
+.dot-y { background: #d29922; }
+.dot-g { background: #3fb950; }
+.term-title { font-size: 10px; font-family: 'Space Mono', monospace; color: #484f58; margin-left: 4px; }
+.terminal pre {
+  padding: 14px 16px; font-family: 'Space Mono', monospace;
+  font-size: 11px; line-height: 1.9; color: #3fb950;
+  white-space: pre; overflow-x: auto;
+}
+.term-dim    { color: #30363d; }
+.term-cyan   { color: #79c0ff; }
+.term-yellow { color: #e3b341; }
+.term-red    { color: #f85149; }
+.term-orange { color: #f0883e; }
+.term-green  { color: #3fb950; }
+.term-white  { color: #f0f6fc; }
+
+/* Thinking */
+.thinking {
+  display: flex; align-items: center; gap: 10px;
+  padding: 16px; font-size: 12px; font-family: 'Space Mono', monospace; color: #8b949e;
+}
+.spinner {
+  width: 14px; height: 14px;
+  border: 2px solid #21262d; border-top-color: #1D9E75;
+  border-radius: 50%; animation: spin 0.8s linear infinite; flex-shrink: 0;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Error */
+.error-box {
+  background: #1a0e0e; border: 1px solid #4a1b0c;
+  border-radius: 8px; padding: 12px 14px;
+  font-size: 12px; font-family: 'Space Mono', monospace; color: #f85149;
+}
+
+/* Responsive */
+@media (max-width: 800px) {
+  .layout { grid-template-columns: 1fr; }
+  .left { border-right: none; border-bottom: 1px solid #21262d; }
+  .stats-grid { grid-template-columns: 1fr 1fr; }
+}
+</style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<div class="topbar">
+  <span class="badge">Roboyaan</span>
+  <h1>Terrain Classification &amp; Adaptive Speed Control</h1>
+  <div class="status-dot" id="statusDot"></div>
+  <span class="status-txt" id="statusTxt">model ready</span>
+</div>
+
+<!-- MAIN LAYOUT -->
+<div class="layout">
+
+  <!-- ── LEFT: UPLOAD PANEL ── -->
+  <div class="left">
+
+    <div>
+      <div class="section-lbl">Input Image</div>
+      <div class="upload-zone" id="dropZone">
+        <input type="file" id="fileInput" accept="image/*" />
+        <div class="up-icon">↑</div>
+        <p>Drop terrain image here</p>
+        <p>or click to browse files</p>
+        <span>JPG · PNG · WEBP · BMP — any resolution</span>
+      </div>
+    </div>
+
+    <div>
+      <div class="section-lbl">Quick Samples</div>
+      <div class="chips">
+        <div class="chip" onclick="loadSample('smooth')">⬜ smooth ground</div>
+        <div class="chip" onclick="loadSample('gravel')">▦ gravel</div>
+        <div class="chip" onclick="loadSample('sand')">⬛ sand</div>
+        <div class="chip" onclick="loadSample('rock')">◈ rock field</div>
+      </div>
+    </div>
+
+    <div id="previewBlock" style="display:none; display:flex; flex-direction:column; gap:10px;">
+      <div class="section-lbl">Preview</div>
+      <div class="preview-wrap">
+        <img id="previewImg" src="" alt="terrain" />
+        <div class="preview-actions">
+          <button class="btn-sm" onclick="resetAll()">✕ clear</button>
+        </div>
+      </div>
+      <button class="analyze-btn" id="analyzeBtn" onclick="analyzeImage()">
+        ▶ &nbsp;Analyze Terrain
+      </button>
+    </div>
+
+    <!-- Info strip -->
+    <div style="margin-top:auto; border-top:1px solid #21262d; padding-top:14px;">
+      <div class="section-lbl">Speed Decision Table</div>
+      <table style="width:100%; border-collapse:collapse; font-size:11px; font-family:'Space Mono',monospace;">
+        <thead>
+          <tr style="color:#484f58;">
+            <th style="text-align:left; padding:4px 0; font-weight:400;">Terrain</th>
+            <th style="text-align:left; padding:4px 0; font-weight:400;">Risk</th>
+            <th style="text-align:right; padding:4px 0; font-weight:400;">Speed</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td style="padding:3px 0;">Smooth Ground</td><td class="c-safe">Safe</td><td style="text-align:right; color:#8b949e;">70–100 km/h</td></tr>
+          <tr><td style="padding:3px 0;">Gravel</td><td class="c-moderate">Moderate</td><td style="text-align:right; color:#8b949e;">40–60 km/h</td></tr>
+          <tr><td style="padding:3px 0;">Sand</td><td class="c-high">High</td><td style="text-align:right; color:#8b949e;">20–40 km/h</td></tr>
+          <tr><td style="padding:3px 0;">Rock Field</td><td class="c-danger">Dangerous</td><td style="text-align:right; color:#8b949e;">0–10 km/h</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ── RIGHT: RESULTS PANEL ── -->
+  <div class="right" id="rightPanel">
+    <div class="empty-state" id="emptyState">
+      <div class="big">🛰️</div>
+      <p>Upload a terrain image to start<br/>classification and speed analysis</p>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ── Config ─────────────────────────────────────────────────────────────────
+const API_URL = "/predict";   // Flask backend running on same origin
+
+const TERRAIN_META = {
+  "Smooth Ground": { icon:"🛣️",  riskClass:"c-safe",     speedClass:"c-safe",     bg:"#0a2018" },
+  "Gravel":        { icon:"🪨",  riskClass:"c-moderate", speedClass:"c-moderate", bg:"#1a1500" },
+  "Sand":          { icon:"🏜️", riskClass:"c-high",     speedClass:"c-high",     bg:"#1a0e00" },
+  "Rock Field":    { icon:"⛰️", riskClass:"c-danger",   speedClass:"c-danger",   bg:"#1a0505" },
+};
+
+let currentFile = null;
+let currentB64  = null;
+
+// ── Upload wiring ───────────────────────────────────────────────────────────
+const dropZone  = document.getElementById("dropZone");
+const fileInput = document.getElementById("fileInput");
+
+fileInput.addEventListener("change", e => { if (e.target.files[0]) loadFile(e.target.files[0]); });
+
+["dragover","dragenter"].forEach(ev => dropZone.addEventListener(ev, e => {
+  e.preventDefault(); dropZone.classList.add("drag");
+}));
+["dragleave","drop"].forEach(ev => dropZone.addEventListener(ev, e => {
+  e.preventDefault(); dropZone.classList.remove("drag");
+}));
+dropZone.addEventListener("drop", e => {
+  const f = e.dataTransfer.files[0];
+  if (f && f.type.startsWith("image/")) loadFile(f);
+});
+
+function loadFile(file) {
+  currentFile = file;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const dataUrl = e.target.result;
+    currentB64 = dataUrl.split(",")[1];
+    document.getElementById("previewImg").src = dataUrl;
+    document.getElementById("previewBlock").style.display = "flex";
+    document.getElementById("rightPanel").innerHTML = `<div class="empty-state" id="emptyState"><div class="big">🖼️</div><p>Image loaded — click<br/><strong>Analyze Terrain</strong> to classify</p></div>`;
+  };
+  reader.readAsDataURL(file);
+}
+
+function resetAll() {
+  currentFile = null; currentB64 = null;
+  fileInput.value = "";
+  document.getElementById("previewBlock").style.display = "none";
+  document.getElementById("previewImg").src = "";
+  document.getElementById("rightPanel").innerHTML = `<div class="empty-state" id="emptyState"><div class="big">🛰️</div><p>Upload a terrain image to start<br/>classification and speed analysis</p></div>`;
+}
+
+// ── Analyze ─────────────────────────────────────────────────────────────────
+async function analyzeImage() {
+  if (!currentFile && !currentB64) return;
+  const btn = document.getElementById("analyzeBtn");
+  btn.disabled = true; btn.textContent = "Analyzing…";
+  setStatus("running inference…", "#d29922");
+
+  document.getElementById("rightPanel").innerHTML = `
+    <div class="result-card">
+      <div class="thinking"><div class="spinner"></div>Running terrain classification model…</div>
+    </div>`;
+
+  try {
+    let result;
+
+    if (currentFile) {
+      // Send as multipart file upload to Flask backend
+      const form = new FormData();
+      form.append("image", currentFile);
+      const res = await fetch(API_URL, { method: "POST", body: form });
+      if (!res.ok) throw new Error(`Server error ${res.status}`);
+      result = await res.json();
+      if (result.error) throw new Error(result.error);
+    } else {
+      // Fallback: base64 JSON post
+      const res = await fetch(API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ image_b64: currentB64 }),
+      });
+      if (!res.ok) throw new Error(`Server error ${res.status}`);
+      result = await res.json();
+      if (result.error) throw new Error(result.error);
+    }
+
+    renderResult(result);
+    setStatus("model ready", "#1D9E75");
+
+  } catch (err) {
+    document.getElementById("rightPanel").innerHTML =
+      `<div class="error-box">⚠ ${err.message}<br/><br/>Make sure the Flask server is running:<br/><code>python app.py</code></div>`;
+    setStatus("error", "#f85149");
+  }
+
+  btn.disabled = false; btn.textContent = "▶  Analyze Terrain";
+}
+
+// ── Render result ────────────────────────────────────────────────────────────
+function renderResult(r) {
+  const meta  = TERRAIN_META[r.terrain] || TERRAIN_META["Gravel"];
+  const conf  = r.confidence.toFixed(1);
+  const scores = r.all_scores || {};
+  const fps   = r.fps ? r.fps.toFixed(1) : "—";
+  const ms    = r.time_ms ? r.time_ms.toFixed(1) : "—";
+
+  // probability rows
+  const probRows = Object.entries(scores)
+    .sort((a,b) => b[1]-a[1])
+    .map(([name, pct]) => {
+      const active = name === r.terrain;
+      return `<div class="prob-row">
+        <span class="prob-name">${name}</span>
+        <div class="prob-track"><div class="prob-fill${active ? " active" : ""}" style="width:${Math.round(pct)}%"></div></div>
+        <span class="prob-pct">${Math.round(pct)}%</span>
+      </div>`;
+    }).join("");
+
+  // terminal text
+  const riskColClass = { Safe:"term-green", Moderate:"term-yellow", High:"term-orange", Dangerous:"term-red" }[r.risk] || "term-white";
+  const termLines = [
+    `<span class="term-dim">────────────────────────────────────────────</span>`,
+    `<span class="term-white">Terrain Detected   :</span> <span class="term-cyan">${r.terrain}</span>`,
+    `<span class="term-white">Confidence         :</span> <span class="term-yellow">${conf}%</span>`,
+    `<span class="term-white">Risk Level         :</span> <span class="${riskColClass}">${r.risk}</span>`,
+    `<span class="term-white">Recommended Speed  :</span> <span class="${riskColClass}">${r.speed} km/h</span>  <span class="term-dim">(range ${r.speed_range} km/h)</span>`,
+    `<span class="term-white">Inference Time     :</span> ${ms} ms`,
+    `<span class="term-white">FPS                :</span> ${fps}`,
+    `<span class="term-dim">────────────────────────────────────────────</span>`,
+  ].join("\n");
+
+  document.getElementById("rightPanel").innerHTML = `
+
+    <!-- Result card -->
+    <div class="result-card">
+      <div class="result-header">
+        <div class="terrain-icon" style="background:${meta.bg};">${meta.icon}</div>
+        <div>
+          <div class="terrain-name">${r.terrain}</div>
+          <div class="terrain-conf">Confidence: ${conf}%</div>
+        </div>
+      </div>
+
+      <div class="stats-grid">
+        <div class="stat-cell">
+          <div class="lbl">Risk Level</div>
+          <div class="val ${meta.riskClass}">${r.risk}</div>
+        </div>
+        <div class="stat-cell">
+          <div class="lbl">Rover Speed</div>
+          <div class="val ${meta.speedClass}">${r.speed} <span style="font-size:13px;font-weight:400;">km/h</span></div>
+          <div class="sub">range: ${r.speed_range} km/h</div>
+        </div>
+        <div class="stat-cell">
+          <div class="lbl">Inference Time</div>
+          <div class="val" style="color:#8b949e;">${ms} <span style="font-size:13px;font-weight:400;">ms</span></div>
+          <div class="sub">fps: ${fps}</div>
+        </div>
+      </div>
+
+      ${r.reasoning ? `<div class="reasoning-box">"${r.reasoning}"</div>` : ""}
+
+      <div class="probs-section">
+        <div class="section-lbl">All class probabilities</div>
+        ${probRows}
+      </div>
+    </div>
+
+    <!-- Terminal output -->
+    <div class="terminal">
+      <div class="terminal-bar">
+        <div class="dot dot-r"></div>
+        <div class="dot dot-y"></div>
+        <div class="dot dot-g"></div>
+        <span class="term-title">terminal output — rover_terrain.py</span>
+      </div>
+      <pre>${termLines}</pre>
+    </div>
+  `;
+}
+
+// ── Sample generators ────────────────────────────────────────────────────────
+function loadSample(type) {
+  const c = document.createElement("canvas");
+  c.width = 224; c.height = 224;
+  const ctx = c.getContext("2d");
+  const rng = () => Math.random();
+
+  if (type === "smooth") {
+    ctx.fillStyle = "#7a6e5f"; ctx.fillRect(0,0,224,224);
+    for (let i=0;i<8;i++) {
+      ctx.strokeStyle=`rgba(155,143,128,${0.4+rng()*0.3})`;
+      ctx.lineWidth=2; ctx.beginPath();
+      ctx.moveTo(0,28*i+rng()*8);
+      ctx.lineTo(224,28*i+rng()*8);
+      ctx.stroke();
+    }
+    for (let i=0;i<600;i++) {
+      ctx.fillStyle=`rgba(${100+rng()*40},${90+rng()*40},${75+rng()*30},0.4)`;
+      ctx.fillRect(rng()*224,rng()*224,1,1);
+    }
+  } else if (type === "gravel") {
+    ctx.fillStyle="#909090"; ctx.fillRect(0,0,224,224);
+    for (let i=0;i<120;i++) {
+      const x=rng()*224, y=rng()*224, r=3+rng()*9;
+      const g=Math.round(70+rng()*90);
+      ctx.fillStyle=`rgb(${g},${g},${g-8})`;
+      ctx.beginPath();
+      ctx.ellipse(x,y,r,r*(0.5+rng()*0.5),rng()*Math.PI,0,Math.PI*2);
+      ctx.fill();
+      ctx.strokeStyle=`rgba(${g+30},${g+30},${g+30},0.5)`;
+      ctx.lineWidth=0.5; ctx.stroke();
+    }
+  } else if (type === "sand") {
+    const g=ctx.createLinearGradient(0,0,224,224);
+    g.addColorStop(0,"#d4b483"); g.addColorStop(1,"#bfa060");
+    ctx.fillStyle=g; ctx.fillRect(0,0,224,224);
+    for (let y=0;y<224;y+=6) {
+      const phase=rng()*Math.PI*2;
+      ctx.strokeStyle=`rgba(220,185,120,${0.2+Math.sin(y*0.1)*0.15})`;
+      ctx.lineWidth=2.5; ctx.beginPath();
+      ctx.moveTo(0,y);
+      for (let x=0;x<224;x+=10) ctx.lineTo(x,y+5*Math.sin(x*0.08+phase));
+      ctx.stroke();
+    }
+    for (let i=0;i<5;i++) {
+      ctx.fillStyle=`rgba(200,170,100,0.25)`;
+      ctx.beginPath();
+      ctx.ellipse(rng()*224,rng()*224,40+rng()*30,15+rng()*10,rng()*Math.PI,0,Math.PI*2);
+      ctx.fill();
+    }
+  } else {
+    ctx.fillStyle="#2e2e2e"; ctx.fillRect(0,0,224,224);
+    for (let i=0;i<22;i++) {
+      const pts=[]; const cx=rng()*200+12, cy=rng()*200+12;
+      const n=5+Math.round(rng()*4);
+      for (let j=0;j<n;j++) pts.push([cx+(-15+rng()*40),cy+(-15+rng()*40)]);
+      const col=Math.round(45+rng()*95);
+      ctx.fillStyle=`rgb(${col},${col},${col-4})`;
+      ctx.beginPath(); ctx.moveTo(pts[0][0],pts[0][1]);
+      pts.slice(1).forEach(p=>ctx.lineTo(p[0],p[1]));
+      ctx.closePath(); ctx.fill();
+      ctx.strokeStyle="#111"; ctx.lineWidth=1.2; ctx.stroke();
+    }
+    for (let i=0;i<12;i++) {
+      ctx.strokeStyle=`rgba(10,10,10,${0.6+rng()*0.4})`;
+      ctx.lineWidth=1+rng()*2; ctx.beginPath();
+      ctx.moveTo(rng()*224,rng()*224); ctx.lineTo(rng()*224,rng()*224);
+      ctx.stroke();
+    }
+  }
+
+  c.toBlob(blob => {
+    currentFile = new File([blob], `sample_${type}.jpg`, { type: "image/jpeg" });
+    const reader = new FileReader();
+    reader.onload = e => {
+      const dataUrl = e.target.result;
+      currentB64 = dataUrl.split(",")[1];
+      document.getElementById("previewImg").src = dataUrl;
+      document.getElementById("previewBlock").style.display = "flex";
+      document.getElementById("rightPanel").innerHTML = `<div class="empty-state"><div class="big">🖼️</div><p>Sample loaded — click<br/><strong>Analyze Terrain</strong> to classify</p></div>`;
+    };
+    reader.readAsDataURL(blob);
+  }, "image/jpeg", 0.92);
+}
+
+// ── Status helper ────────────────────────────────────────────────────────────
+function setStatus(msg, color) {
+  document.getElementById("statusTxt").textContent = msg;
+  document.getElementById("statusDot").style.background = color;
+  document.getElementById("statusDot").style.boxShadow = `0 0 0 3px ${color}33`;
+}
+</script>
+</body>
+</html>
